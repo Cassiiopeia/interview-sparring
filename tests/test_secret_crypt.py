@@ -577,6 +577,76 @@ def test_encrypt_never_deletes_an_encrypted_copy_that_has_no_sync_record(tmp_roo
 
 
 @requires_openssl
+def test_encrypt_keeps_a_deleted_files_encrypted_copy_that_changed_elsewhere_after_the_last_sync(
+    tmp_root, korean_secret_file
+):
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    encrypted_file = encrypted_copy_of(tmp_root, korean_secret_file.name)
+    korean_secret_file.unlink()
+    # the other machine pushed v2 and it was pulled in: the .enc no longer equals the last synced content
+    encrypted_file.write_bytes(secret_crypt.encrypt_bytes(KEY, b"v2 from elsewhere\n"))
+
+    result = secret_crypt.encrypt_all(tmp_root, KEY)
+
+    remote_copy = secret_crypt.remote_copy_path_for(korean_secret_file)
+    assert result.deleted == []
+    assert result.conflicts == [korean_secret_file]
+    assert secret_crypt.decrypt_bytes(KEY, encrypted_file.read_bytes()) == b"v2 from elsewhere\n"
+    assert remote_copy.read_bytes() == b"v2 from elsewhere\n"
+    assert not korean_secret_file.exists()
+    # the sync record stays, so the next run reports the same conflict instead of deleting
+    assert korean_secret_file.name in secret_crypt.load_sync_state(korean_secret_file.parent)
+    assert secret_crypt.encrypt_all(tmp_root, KEY).conflicts == [korean_secret_file]
+    assert secret_crypt.has_pending_secret_deletions(tmp_root) is True
+
+
+@requires_openssl
+def test_a_kept_encrypted_copy_is_restored_by_decrypt_and_the_conflict_is_gone(tmp_root, korean_secret_file):
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    korean_secret_file.unlink()
+    encrypted_copy_of(tmp_root, korean_secret_file.name).write_bytes(secret_crypt.encrypt_bytes(KEY, b"v2\n"))
+    assert secret_crypt.encrypt_all(tmp_root, KEY).conflicts == [korean_secret_file]
+
+    # take theirs: decrypt writes the file back
+    assert secret_crypt.decrypt_all(tmp_root, KEY).restored == [korean_secret_file]
+
+    result = secret_crypt.encrypt_all(tmp_root, KEY)
+    assert (result.changed, result.conflicts, result.deleted) == ([], [], [])
+    assert korean_secret_file.read_bytes() == b"v2\n"
+
+
+@requires_openssl
+def test_cli_encrypt_exits_3_with_the_deleted_here_but_changed_elsewhere_message(
+    tmp_root, korean_secret_file, capsys, monkeypatch
+):
+    monkeypatch.setenv("SPARRING_ENCRYPTION_KEY", KEY)
+    assert secret_crypt.main(["encrypt"]) == 0
+    korean_secret_file.unlink()
+    encrypted_copy_of(tmp_root, korean_secret_file.name).write_bytes(secret_crypt.encrypt_bytes(KEY, b"v2\n"))
+    capsys.readouterr()
+
+    assert secret_crypt.main(["encrypt"]) == 3
+
+    assert (
+        "prep/profile/secret/비밀 메모.md was deleted here but changed elsewhere; remote saved as 비밀 메모.md.remote"
+        in capsys.readouterr().err
+    )
+
+
+@requires_openssl
+def test_encrypt_stops_when_the_encrypted_copy_of_a_deleted_file_cannot_be_read(tmp_root, korean_secret_file):
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    encrypted_file = encrypted_copy_of(tmp_root, korean_secret_file.name)
+    korean_secret_file.unlink()
+    encrypted_file.write_bytes(b"not an openssl file")
+
+    with pytest.raises(secret_crypt.SecretCryptError, match="refusing to overwrite"):
+        secret_crypt.encrypt_all(tmp_root, KEY)
+
+    assert encrypted_file.is_file()
+
+
+@requires_openssl
 def test_has_pending_secret_deletions_sees_a_deleted_file_with_no_plaintext_left(tmp_root, korean_secret_file):
     assert secret_crypt.has_pending_secret_deletions(tmp_root) is False
     secret_crypt.encrypt_all(tmp_root, KEY)

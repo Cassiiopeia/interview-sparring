@@ -54,8 +54,8 @@ The five absolute rules live in `CLAUDE.md` (single source; not repeated here). 
 ## 5. Session order
 
 **Open** (the user never has to explain where they are):
-1. `init.py status` (see the command file). `hooks: false` (a fresh clone) > run `init.py hooks` first and tell the
-   user in one line. No settings yet > run modes/init.md instead.
+1. `init.py status` (see the command file). No settings yet > run modes/init.md instead. `missing` contains
+   "privacy hooks inactive" (a fresh clone) > run `init.py hooks` first and tell the user in one line.
 2. If `has_key`: `secret_crypt.py decrypt`. Exit codes 1/2/3/4: what to say and do is listed in
    `.claude/commands/spar.md` §1 step 2 (single source).
 3. Read `prep/status.md`, `prep/profile/coaching.md`, the active interview's `directions.md`, `tasks.md`, and the

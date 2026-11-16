@@ -664,6 +664,68 @@ def test_a_lone_secret_deletion_is_staged_by_the_hook_and_committed_on_the_secon
     assert DELETABLE_ENCRYPTED_RELATIVE not in git(git_repo, "ls-files").stdout.splitlines()
 
 
+@pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
+@requires_openssl
+def test_a_lone_secret_edit_is_staged_by_the_hook_and_committed_on_the_second_try(git_repo):
+    commit_with_one_synced_secret_file(git_repo)
+
+    (git_repo / DELETABLE_SECRET_RELATIVE).write_text("edited\n", encoding="utf-8")
+    lone_attempt = git(git_repo, "commit", "-q", "-m", "second", check=False)
+    assert lone_attempt.returncode != 0
+    assert f"M  {DELETABLE_ENCRYPTED_RELATIVE}" in git(git_repo, "status", "--short").stdout.splitlines()
+
+    assert git(git_repo, "commit", "-q", "-m", "second", check=False).returncode == 0
+    assert git(git_repo, "show", "--name-status", "--format=", "HEAD").stdout.splitlines() == [
+        f"M\t{DELETABLE_ENCRYPTED_RELATIVE}"
+    ]
+
+
+def make_second_machine_push_version_two(first_root, tmp_path):
+    """Bare remote + a second clone that decrypts v1, edits to v2, encrypts and pushes (the other machine)"""
+    remote = tmp_path.parent / (tmp_path.name + "-remote.git")
+    git(tmp_path, "init", "-q", "--bare", str(remote))
+    git(first_root, "remote", "add", "origin", str(remote))
+    git(first_root, "push", "-q", "origin", "HEAD:refs/heads/trunk")
+    second_root = tmp_path.parent / (tmp_path.name + "-second")
+    git(tmp_path, "clone", "-q", "--branch", "trunk", str(remote), str(second_root))
+    secret_crypt.decrypt_all(second_root, KEY)
+    (second_root / DELETABLE_SECRET_RELATIVE).write_text("v2 from the other machine\n", encoding="utf-8")
+    secret_crypt.encrypt_all(second_root, KEY)
+    git(second_root, "add", "--", DELETABLE_ENCRYPTED_RELATIVE)
+    git(second_root, "commit", "-q", "-m", "second machine")
+    git(second_root, "push", "-q", "origin", "HEAD:refs/heads/trunk")
+    return remote, second_root
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
+@requires_openssl
+def test_a_deletion_never_drops_an_encrypted_copy_the_other_machine_changed(git_repo):
+    # A and B synced v1; B pushes v2; A deletes the plaintext, pulls (fast-forward), then commits
+    commit_with_one_synced_secret_file(git_repo)
+    remote, second_root = make_second_machine_push_version_two(git_repo, git_repo)
+    try:
+        (git_repo / DELETABLE_SECRET_RELATIVE).unlink()
+        git(git_repo, "pull", "-q", "--ff-only", "origin", "trunk")
+        write(git_repo, "README.md", "clean, session 2\n")
+        stage(git_repo, "README.md")
+
+        blocked_commit = git(git_repo, "commit", "-q", "-m", "second", check=False)
+
+        assert blocked_commit.returncode != 0
+        assert (
+            "doc.md was deleted here but changed elsewhere; remote saved as doc.md.remote" in blocked_commit.stderr
+        )
+        encrypted_file = git_repo / DELETABLE_ENCRYPTED_RELATIVE
+        assert DELETABLE_ENCRYPTED_RELATIVE in git(git_repo, "ls-files").stdout.splitlines()
+        assert secret_crypt.decrypt_bytes(KEY, encrypted_file.read_bytes()) == b"v2 from the other machine\n"
+        remote_copy = git_repo / (DELETABLE_SECRET_RELATIVE + ".remote")
+        assert remote_copy.read_text(encoding="utf-8") == "v2 from the other machine\n"
+        assert git(git_repo, "rev-list", "--count", "HEAD").stdout.strip() == "2"
+    finally:
+        shutil.rmtree(remote, ignore_errors=True)
+        shutil.rmtree(second_root, ignore_errors=True)
+
+
 def install_fake_command(bin_directory, name, script_body):
     bin_directory.mkdir(exist_ok=True)
     fake_command = bin_directory / name

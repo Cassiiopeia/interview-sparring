@@ -15,9 +15,12 @@ Sync state: secret/.sync-state.json keeps the last synced hash per file (base); 
 compared three-way, so a change on one side is carried over and a change on both sides is a conflict.
 Conflict: the other side is saved as <name>.remote and nothing is overwritten. To resolve, merge into the local file
 and delete its .enc then encrypt (keep mine), or copy <name>.remote over the local file then decrypt (take theirs).
+Deleted here but changed elsewhere: the .enc is kept, its content saved as <name>.remote (a conflict, exit 3); decrypt
+takes theirs (restores the file), deleting the .enc and the .remote keeps the deletion.
 Fast-forward: when only the remote changed, the replaced local content is kept as <name>.previous (single slot).
-Deletion: a .enc whose plaintext is gone and whose path is in the sync state (synced before, deleted since) is deleted;
-a .enc with no sync state entry (a fresh machine before decrypt) is never deleted.
+Deletion: a .enc whose plaintext is gone, whose path is in the sync state (synced before, deleted since) and whose
+decrypted content still equals the synced base is deleted; one that changed elsewhere since is kept (conflict), and a
+.enc with no sync state entry (a fresh machine before decrypt) is never deleted.
 Exit codes: 0 ok, 1 operation failed, 2 openssl or key missing (or bad usage), 3 conflicts, 4 wrong key.
 """
 
@@ -93,7 +96,8 @@ class WrongKeyError(SecretCryptError):
 
 
 class EncryptResult(NamedTuple):
-    """changed: .enc files written / conflicts: local files whose .enc was left untouched (remote saved as <name>.remote) /
+    """changed: .enc files written / conflicts: local files whose .enc was left untouched (remote saved as <name>.remote;
+    a file deleted here but changed elsewhere is listed too, it no longer exists) /
     deleted: .enc files removed because their plaintext was deleted after a sync"""
 
     changed: list
@@ -284,15 +288,25 @@ def has_pending_secret_deletions(root):
     )
 
 
-def delete_encrypted_copies_of_removed_files(secret_dir, sync_state):
-    """Remove each .enc of a deleted secret file and forget its sync record; returns the removed .enc paths"""
+def delete_encrypted_copies_of_removed_files(key, secret_dir, sync_state):
+    """Remove the .enc of a deleted secret file only when it still equals the synced base; returns (removed, conflicts)
+
+    Changed elsewhere since the last sync > .enc kept, its content saved as <name>.remote, the file listed as a conflict.
+    """
     removed = []
+    conflicts = []
     for encrypted_file in list_deleted_secret_copies(secret_dir, sync_state):
         secret_file = secret_file_for(encrypted_dir_for(secret_dir), encrypted_file)
+        state_key = relative_state_key(secret_dir, secret_file)
+        remote_plaintext = read_remote_plaintext(key, encrypted_file)
+        if sha256_of(remote_plaintext) != sync_state[state_key]:
+            save_remote_copy(secret_file, remote_plaintext)
+            conflicts.append(secret_file)
+            continue
         encrypted_file.unlink()
-        del sync_state[relative_state_key(secret_dir, secret_file)]
+        del sync_state[state_key]
         removed.append(encrypted_file)
-    return removed
+    return removed, conflicts
 
 
 # ---------- encrypt / decrypt ----------
@@ -338,7 +352,8 @@ def encrypt_all(root, key):
 
     Per file: no .enc, or remote == base (only local changed) > write .enc; remote == local > nothing;
     otherwise (remote changed, alone or too) > conflict: .enc kept, remote saved as <name>.remote.
-    Then a .enc whose plaintext was deleted after a sync is removed (see list_deleted_secret_copies).
+    Then a .enc whose plaintext was deleted after a sync is removed if it is unchanged since (see
+    delete_encrypted_copies_of_removed_files), else kept and reported as a conflict.
     Returns EncryptResult(changed, conflicts, deleted); the keycheck file is not listed.
     """
     verify_key(root, key)
@@ -371,8 +386,11 @@ def encrypt_all(root, key):
                     changed.append(encrypted_file)
                 # written or already equal > this content is now the last synced one
                 sync_state[state_key] = local_hash
-            # deleted locally after a sync > the encrypted copy goes too (git then records the removal)
-            deleted.extend(delete_encrypted_copies_of_removed_files(secret_dir, sync_state))
+            # deleted locally after a sync > the encrypted copy goes too (git then records the removal),
+            # unless it changed elsewhere since (data-loss guard)
+            removed, deletion_conflicts = delete_encrypted_copies_of_removed_files(key, secret_dir, sync_state)
+            deleted.extend(removed)
+            conflicts.extend(deletion_conflicts)
         finally:
             if sync_state != original_state:
                 save_sync_state(secret_dir, sync_state)
@@ -481,8 +499,18 @@ def print_ahead(root, ahead):
         print(f"[secret_crypt] local ahead: {relative_path} (run encrypt)")
 
 
+def describe_deleted_here_conflict(root, secret_file):
+    """Conflict line for a file deleted here whose .enc changed elsewhere"""
+    relative_path = Path(secret_file).relative_to(root).as_posix()
+    return f"{relative_path} was deleted here but changed elsewhere; remote saved as {Path(secret_file).name}{REMOTE_COPY_SUFFIX}"
+
+
 def print_conflicts(root, conflicts):
-    for relative_path in to_relative_text(root, conflicts):
+    for secret_file in conflicts:
+        if not os.path.lexists(secret_file):
+            print(f"[secret_crypt] conflict: {describe_deleted_here_conflict(root, secret_file)}", file=sys.stderr)
+            continue
+        relative_path = Path(secret_file).relative_to(root).as_posix()
         print(
             f"[secret_crypt] conflict: {relative_path} "
             f"(remote saved as {relative_path}{REMOTE_COPY_SUFFIX})",

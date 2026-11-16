@@ -27,6 +27,7 @@ from secret_crypt import (
     SecretCryptError,
     WrongKeyError,
     encrypt_all,
+    describe_deleted_here_conflict,
     find_openssl,
     has_pending_secret_deletions,
     keycheck_path,
@@ -243,6 +244,8 @@ def encrypt_secret_files(root):
         conflict_lines = [
             f"{conflict.relative_to(root).as_posix()}: differs from its encrypted copy "
             f"(the other side is saved as {conflict.name}{REMOTE_COPY_SUFFIX})"
+            if os.path.lexists(conflict)
+            else describe_deleted_here_conflict(root, conflict)
             for conflict in result.conflicts
         ]
         return conflict_lines + [f"run `{DECRYPT_COMMAND}` first, resolve the conflicts, then commit again"]

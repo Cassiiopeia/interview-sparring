@@ -46,8 +46,11 @@ keep the real name inside `secret/`.
   name, organization, question text or score.
 - Stage only the paths the tutor changed in this session.
 - **Deleting a secret file is just deleting the plaintext** in `secret/` (not the `secret/` folder: its sync record goes
-  with it). The hook removes the encrypted copy and stages the removal. If git says "nothing to commit", the hook has
-  already staged the removal: commit again.
+  with it). The hook removes the encrypted copy and stages the removal, unless the encrypted copy changed elsewhere
+  since the last sync: it is then kept, saved as `<name>.remote`, and the commit is blocked as a conflict.
+- When only secret files changed (an edit or a deletion), git says "nothing to commit" on the first try, because it
+  decides before the hook stages the `.enc` change. The hook has staged it: commit again. Session close always commits
+  together with a normal file (`status.md`), so it records in one go.
 - Before publishing anything: `python3 tutor/scripts/privacy_check.py scan-all`.
 
 ## 5. Things the tutor never does

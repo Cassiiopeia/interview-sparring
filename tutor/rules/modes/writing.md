@@ -57,8 +57,9 @@ When the user says they submitted:
 1. Copy the final files: `python3 tutor/scripts/interview_folder.py submit <folder> <file>...` (writing/ > submitted/,
    never overwrites). In `public-encrypted` mode the full text must exist only inside a `secret/` folder (privacy.md §2):
    `submit` keeps the relative path, so `writing/secret/x.md` lands in `submitted/secret/x.md` (encrypted on commit).
-   A final that sits in plain `writing/` is first copied into `writing/secret/` and submitted from there; never submit
-   from the plain folder, because a plain copy in `submitted/` would be published.
+   A final that sits in plain `writing/` is first moved into `writing/secret/` (the plain copy is deleted) and submitted
+   from there; never submit from the plain folder, because a plain copy in `submitted/` would be published. A plain copy
+   that was ever committed stays in git history: tell the user.
 2. Derive `questions.md` from the submitted sentences, each row with its source sentence (grading.md §4).
 3. Close the writing task in `tasks.md` with the date; open the practice tasks (must-prepare three).
 4. `submitted/` is never edited afterwards. Corrections the user wishes they had made go into `directions.md` as
