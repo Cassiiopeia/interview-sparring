@@ -1,0 +1,16 @@
+# Personal records and secrets: this repo is public, so anything committed is published
+.env
+.env.*
+**/local/
+**/secret/
+# half-written temp files of secret_crypt (a crash can leave one next to a committed file)
+.*.partial
+
+# Tool output
+.superpowers/
+
+# Python and OS byproducts
+__pycache__/
+.pytest_cache/
+.DS_Store
+Thumbs.db

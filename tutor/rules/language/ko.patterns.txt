@@ -1,0 +1,23 @@
+# Korean draft patterns for draft_check.py: one regular expression per line, '#' starts a comment.
+# Matched case-insensitively against each sentence. A hit is a warning, not a verdict: reading aloud decides.
+
+# written style that nobody says out loud
+함으로써
+에\s?있어서
+하는 바(입니다|이다)
+고자 합니다
+# abstract links and lessons that close a paragraph like a proverb
+중요성을 (깨달|느끼|알게)
+(관심|흥미)(이|을) (가지게|갖게) 되었
+계기가 되었습니다
+역량을 (키울|기를) 수 있었
+# hedging: say it or leave it out
+(던|었던|했던) 것 같습니다
+것 같다고 생각합니다
+# feelings the speaker never reported
+마음에 걸렸
+가슴(이|에) (뛰|와 닿)
+# cliché openers and closers
+열정(을|으로)
+성장할 수 있는 (기회|계기)
+최선을 다하겠습니다

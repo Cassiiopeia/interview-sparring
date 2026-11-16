@@ -1,0 +1,28 @@
+# English draft patterns for draft_check.py: one regular expression per line, '#' starts a comment.
+# Matched case-insensitively against each sentence. A hit is a warning, not a verdict: reading aloud decides.
+
+# hedging: say it or leave it out
+\bI believe that\b
+\bI feel like\b
+\bI think that maybe\b
+\bsort of\b
+\bkind of\b
+# cliché and buzzwords
+\bpassionate about\b
+\bin today's fast[- ]paced\b
+\bleverag(e|ing) synerg
+\bthink outside the box\b
+\bgo-getter\b
+\bdynamic environment\b
+\bproven track record\b
+\bhit the ground running\b
+\bwear many hats\b
+# abstract links and lessons that close a paragraph like a proverb
+\btaught me the importance of\b
+\bsparked my interest\b
+\bplays a (crucial|vital|pivotal) role\b
+\bdelve into\b
+\btestament to\b
+# feelings the speaker never reported
+\bdeeply moved\b
+\bresonated with me\b

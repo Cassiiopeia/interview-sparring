@@ -1,0 +1,12 @@
+#!/bin/sh
+# Pre-commit: encrypt secret/ folders, then block personal data (see tutor/scripts/privacy_check.py)
+cd "$(git rev-parse --show-toplevel)" || exit 1
+# probe real execution: a python3 stub can exist on PATH (Windows Store) and still not run
+if python3 -c "import sys" >/dev/null 2>&1; then
+    exec python3 tutor/scripts/privacy_check.py hook
+elif py -3 -c "import sys" >/dev/null 2>&1; then
+    exec py -3 tutor/scripts/privacy_check.py hook
+else
+    echo "interview-sparring: Python 3 not found; commit blocked" >&2
+    exit 1
+fi

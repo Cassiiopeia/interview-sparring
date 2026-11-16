@@ -1,0 +1,13 @@
+#!/bin/sh
+# Pre-push: refuse a push that would publish prep/ to the wrong place (see tutor/scripts/remote_guard.py)
+# git passes the remote name as $1 and its URL as $2
+cd "$(git rev-parse --show-toplevel)" || exit 1
+# probe real execution: a python3 stub can exist on PATH (Windows Store) and still not run
+if python3 -c "import sys" >/dev/null 2>&1; then
+    exec python3 tutor/scripts/remote_guard.py can-push --remote-name "$1" --remote-url "$2"
+elif py -3 -c "import sys" >/dev/null 2>&1; then
+    exec py -3 tutor/scripts/remote_guard.py can-push --remote-name "$1" --remote-url "$2"
+else
+    echo "interview-sparring: Python 3 not found; push blocked" >&2
+    exit 1
+fi

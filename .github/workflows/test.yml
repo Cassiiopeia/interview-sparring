@@ -1,0 +1,35 @@
+# Runs the engine tests on macOS and Windows for every push and pull request.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pytest
+        run: python -m pip install pytest
+      # Git identity for tests that create temporary repositories.
+      - name: Configure git
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.com"
+      - name: Show openssl
+        run: openssl version
+      - name: Tests
+        run: python -m pytest -q
+      - name: Agent files in sync
+        run: python tutor/scripts/sync_agents.py check
+      - name: Privacy scan
+        run: python tutor/scripts/privacy_check.py scan-all
