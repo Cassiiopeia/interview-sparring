@@ -689,7 +689,7 @@ def make_second_machine_push_version_two(first_root, tmp_path):
     second_root = tmp_path.parent / (tmp_path.name + "-second")
     git(tmp_path, "clone", "-q", "--branch", "trunk", str(remote), str(second_root))
     secret_crypt.decrypt_all(second_root, KEY)
-    (second_root / DELETABLE_SECRET_RELATIVE).write_text("v2 from the other machine\n", encoding="utf-8")
+    (second_root / DELETABLE_SECRET_RELATIVE).write_bytes(b"v2 from the other machine\n")
     secret_crypt.encrypt_all(second_root, KEY)
     git(second_root, "add", "--", DELETABLE_ENCRYPTED_RELATIVE)
     git(second_root, "commit", "-q", "-m", "second machine")
@@ -719,7 +719,7 @@ def test_a_deletion_never_drops_an_encrypted_copy_the_other_machine_changed(git_
         assert DELETABLE_ENCRYPTED_RELATIVE in git(git_repo, "ls-files").stdout.splitlines()
         assert secret_crypt.decrypt_bytes(KEY, encrypted_file.read_bytes()) == b"v2 from the other machine\n"
         remote_copy = git_repo / (DELETABLE_SECRET_RELATIVE + ".remote")
-        assert remote_copy.read_text(encoding="utf-8") == "v2 from the other machine\n"
+        assert remote_copy.read_bytes() == b"v2 from the other machine\n"
         assert git(git_repo, "rev-list", "--count", "HEAD").stdout.strip() == "2"
     finally:
         shutil.rmtree(remote, ignore_errors=True)
