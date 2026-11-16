@@ -4,7 +4,8 @@
 secret/ stays gitignored; secret-encrypted/ holds one AES-256-CBC .enc file per secret file (openssl).
 File names are not secret: only contents are encrypted, so names and folder layout are visible in secret-encrypted/.
 
-    python3 tutor/scripts/secret_crypt.py encrypt   secret/ > secret-encrypted/*.enc (never overwrites a newer .enc)
+    python3 tutor/scripts/secret_crypt.py encrypt   secret/ > secret-encrypted/*.enc (never overwrites a newer .enc;
+                                                    removes the .enc of a file deleted from secret/ after a sync)
     python3 tutor/scripts/secret_crypt.py decrypt   secret-encrypted/*.enc > secret/ (never overwrites a local edit)
     python3 tutor/scripts/secret_crypt.py check     JSON status: openssl, key, secret folders, files not encrypted yet
 
@@ -15,6 +16,8 @@ compared three-way, so a change on one side is carried over and a change on both
 Conflict: the other side is saved as <name>.remote and nothing is overwritten. To resolve, merge into the local file
 and delete its .enc then encrypt (keep mine), or copy <name>.remote over the local file then decrypt (take theirs).
 Fast-forward: when only the remote changed, the replaced local content is kept as <name>.previous (single slot).
+Deletion: a .enc whose plaintext is gone and whose path is in the sync state (synced before, deleted since) is deleted;
+a .enc with no sync state entry (a fresh machine before decrypt) is never deleted.
 Exit codes: 0 ok, 1 operation failed, 2 openssl or key missing (or bad usage), 3 conflicts, 4 wrong key.
 """
 
@@ -90,10 +93,12 @@ class WrongKeyError(SecretCryptError):
 
 
 class EncryptResult(NamedTuple):
-    """changed: .enc files written / conflicts: local files whose .enc was left untouched (remote saved as <name>.remote)"""
+    """changed: .enc files written / conflicts: local files whose .enc was left untouched (remote saved as <name>.remote) /
+    deleted: .enc files removed because their plaintext was deleted after a sync"""
 
     changed: list
     conflicts: list
+    deleted: list
 
 
 class DecryptResult(NamedTuple):
@@ -260,6 +265,36 @@ def relative_state_key(secret_dir, secret_file):
     return Path(secret_file).relative_to(secret_dir).as_posix()
 
 
+def list_deleted_secret_copies(secret_dir, sync_state):
+    """.enc files whose plaintext is gone and whose path the sync state recorded (synced before, deleted since)"""
+    encrypted_dir = encrypted_dir_for(secret_dir)
+    deleted_copies = []
+    for encrypted_file in list_encrypted_files(encrypted_dir):
+        secret_file = secret_file_for(encrypted_dir, encrypted_file)
+        # (no state entry = never synced here, e.g. a fresh machine before decrypt: keep the .enc)
+        if not os.path.lexists(secret_file) and relative_state_key(secret_dir, secret_file) in sync_state:
+            deleted_copies.append(encrypted_file)
+    return deleted_copies
+
+
+def has_pending_secret_deletions(root):
+    """Any secret/ folder with a deleted file whose .enc is still there (the hook must run encrypt for it)"""
+    return any(
+        list_deleted_secret_copies(secret_dir, load_sync_state(secret_dir)) for secret_dir in find_secret_dirs(root)
+    )
+
+
+def delete_encrypted_copies_of_removed_files(secret_dir, sync_state):
+    """Remove each .enc of a deleted secret file and forget its sync record; returns the removed .enc paths"""
+    removed = []
+    for encrypted_file in list_deleted_secret_copies(secret_dir, sync_state):
+        secret_file = secret_file_for(encrypted_dir_for(secret_dir), encrypted_file)
+        encrypted_file.unlink()
+        del sync_state[relative_state_key(secret_dir, secret_file)]
+        removed.append(encrypted_file)
+    return removed
+
+
 # ---------- encrypt / decrypt ----------
 
 
@@ -303,11 +338,13 @@ def encrypt_all(root, key):
 
     Per file: no .enc, or remote == base (only local changed) > write .enc; remote == local > nothing;
     otherwise (remote changed, alone or too) > conflict: .enc kept, remote saved as <name>.remote.
-    Returns EncryptResult(changed, conflicts); the keycheck file is not listed.
+    Then a .enc whose plaintext was deleted after a sync is removed (see list_deleted_secret_copies).
+    Returns EncryptResult(changed, conflicts, deleted); the keycheck file is not listed.
     """
     verify_key(root, key)
     changed = []
     conflicts = []
+    deleted = []
     for secret_dir in find_secret_dirs(root):
         sync_state = load_sync_state(secret_dir)
         original_state = dict(sync_state)
@@ -334,12 +371,14 @@ def encrypt_all(root, key):
                     changed.append(encrypted_file)
                 # written or already equal > this content is now the last synced one
                 sync_state[state_key] = local_hash
+            # deleted locally after a sync > the encrypted copy goes too (git then records the removal)
+            deleted.extend(delete_encrypted_copies_of_removed_files(secret_dir, sync_state))
         finally:
             if sync_state != original_state:
                 save_sync_state(secret_dir, sync_state)
     # (after the loop: a failed run must not pin a wrong key as the repo key)
     create_keycheck_if_missing(root, key)
-    return EncryptResult(changed, conflicts)
+    return EncryptResult(changed, conflicts, deleted)
 
 
 def decrypt_all(root, key):
@@ -432,6 +471,11 @@ def print_written_files(root, command, written):
         print(f"  {relative_path}")
 
 
+def print_deleted(root, deleted):
+    for relative_path in to_relative_text(root, deleted):
+        print(f"[secret_crypt] deleted: {relative_path} (its secret file was deleted)")
+
+
 def print_ahead(root, ahead):
     for relative_path in to_relative_text(root, ahead):
         print(f"[secret_crypt] local ahead: {relative_path} (run encrypt)")
@@ -463,10 +507,11 @@ def command_encrypt_or_decrypt(root, command):
         )
         return EXIT_PREREQUISITE_MISSING
     ahead = []
+    deleted = []
     try:
         if command == "encrypt":
             was_keycheck_present = keycheck_path(root).is_file()
-            written, conflicts = encrypt_all(root, key)
+            written, conflicts, deleted = encrypt_all(root, key)
             if not was_keycheck_present:
                 print(f"[secret_crypt] created {KEYCHECK_FILE_NAME} (commit it)")
         else:
@@ -478,6 +523,7 @@ def command_encrypt_or_decrypt(root, command):
         print(f"[secret_crypt] {command} failed: {error}", file=sys.stderr)
         return EXIT_OPERATION_FAILED
     print_written_files(root, command, written)
+    print_deleted(root, deleted)
     print_ahead(root, ahead)
     print_conflicts(root, conflicts)
     return EXIT_CONFLICT if conflicts else 0

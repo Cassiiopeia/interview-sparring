@@ -13,6 +13,8 @@ On Windows run scripts with `py -3` instead of `python3`.
 ## 1. Session start (every mode except `update`)
 
 1. `python3 tutor/scripts/init.py status`
+   - `"hooks": false` (a fresh clone has the privacy hooks off) > `python3 tutor/scripts/init.py hooks` before anything
+     else, and tell the user in one line that the privacy hooks are now on.
    - `"missing": ["setup has not run yet"]` > go to `init` (tutor/rules/modes/init.md), whatever the argument was.
    - Reply in `language`. Voice input (`input: voice`) > tutor/rules/voice.md applies.
 2. `has_key: true` > `python3 tutor/scripts/secret_crypt.py decrypt`

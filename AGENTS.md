@@ -47,7 +47,7 @@ Scripts use only the Python standard library (3.10+). Run them from the reposito
 
 | Script | Use |
 |---|---|
-| `init.py status` / `setup` / `confirm-remote` | setup state, first-time setup, private-remote confirmation |
+| `init.py status` / `setup` / `hooks` / `confirm-remote` | setup state, first-time setup, privacy hooks on (fresh clone), private-remote confirmation |
 | `secret_crypt.py decrypt` / `encrypt` / `check` | encrypted `secret/` folders (exit 3 conflict, 4 wrong key) |
 | `interview_folder.py new` / `submit` / `status` | interview folders, submitted files, status board |
 | `review.py due` / `add` / `grade` / `list` / `stats` | recall cards |

@@ -35,8 +35,8 @@ keep the real name inside `secret/`.
 - Before creating one, warn first: **a lost key cannot be recovered**. Then suggest a backup place (a password
   manager, or a repository secret) and let the user do the copying.
 - New computer: the user puts the key in `.env`; the session start runs `secret_crypt.py decrypt`.
-- Decrypt exit 3 = both sides changed a file: the other copy is saved as `<name>.remote`, nothing is overwritten.
-  Tell the user which file, then merge together. Exit 4 = the key does not match: never create a new key over it.
+- Decrypt exit codes 1/2/3/4 (failure, prerequisite missing, conflict, wrong key) and what to do for each:
+  `.claude/commands/spar.md` §1 step 2. A wrong key never gets a new key created over it.
 
 ## 4. Commits
 
@@ -45,6 +45,9 @@ keep the real name inside `secret/`.
 - **Commit messages carry no content.** `practice: 1 session`, `prep: facts updated`, `writing: draft 2`. Never a
   name, organization, question text or score.
 - Stage only the paths the tutor changed in this session.
+- **Deleting a secret file is just deleting the plaintext** in `secret/` (not the `secret/` folder: its sync record goes
+  with it). The hook removes the encrypted copy and stages the removal. If git says "nothing to commit", the hook has
+  already staged the removal: commit again.
 - Before publishing anything: `python3 tutor/scripts/privacy_check.py scan-all`.
 
 ## 5. Things the tutor never does

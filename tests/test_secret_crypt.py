@@ -518,6 +518,87 @@ def test_key_is_passed_only_through_child_environment(tmp_root, korean_secret_fi
         assert env["SPARRING_ENCRYPTION_KEY"] == KEY
 
 
+# ---------- deleting a secret file ----------
+
+
+def encrypted_copy_of(tmp_root, name):
+    return tmp_root / "prep" / "profile" / "secret-encrypted" / f"{name}.enc"
+
+
+@requires_openssl
+def test_encrypt_removes_the_encrypted_copy_of_a_file_deleted_after_a_sync(tmp_root, korean_secret_file):
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    encrypted_file = encrypted_copy_of(tmp_root, korean_secret_file.name)
+    korean_secret_file.unlink()
+
+    result = secret_crypt.encrypt_all(tmp_root, KEY)
+
+    assert result.deleted == [encrypted_file]
+    assert not encrypted_file.exists()
+    # the sync record goes with it, so a later file of the same name starts fresh
+    assert korean_secret_file.name not in secret_crypt.load_sync_state(korean_secret_file.parent)
+    assert secret_crypt.encrypt_all(tmp_root, KEY).deleted == []
+
+
+@requires_openssl
+def test_encrypt_deletes_only_the_removed_file_and_keeps_nested_ones(tmp_root):
+    secret_dir = tmp_root / "prep" / "secret"
+    keep_file = secret_dir / "keep.md"
+    nested_file = secret_dir / "interviews" / "a" / "notes.md"
+    removed_file = secret_dir / "doc.md"
+    nested_file.parent.mkdir(parents=True)
+    for file in (keep_file, nested_file, removed_file):
+        file.write_text(f"{file.name}\n", encoding="utf-8")
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    removed_file.unlink()
+    nested_file.unlink()
+
+    result = secret_crypt.encrypt_all(tmp_root, KEY)
+
+    mirror = tmp_root / "prep" / "secret-encrypted"
+    assert sorted(result.deleted) == sorted([mirror / "doc.md.enc", mirror / "interviews" / "a" / "notes.md.enc"])
+    assert (mirror / "keep.md.enc").is_file()
+
+
+@requires_openssl
+def test_encrypt_never_deletes_an_encrypted_copy_that_has_no_sync_record(tmp_root, korean_secret_file):
+    # a fresh machine: .enc pulled from git, nothing decrypted yet, so no plaintext and no .sync-state.json
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    korean_secret_file.unlink()
+    secret_crypt.sync_state_path(korean_secret_file.parent).unlink()
+    encrypted_file = encrypted_copy_of(tmp_root, korean_secret_file.name)
+
+    result = secret_crypt.encrypt_all(tmp_root, KEY)
+
+    assert result.deleted == []
+    assert encrypted_file.is_file()
+    # ... and decrypt can still restore it
+    assert secret_crypt.decrypt_all(tmp_root, KEY).restored == [korean_secret_file]
+
+
+@requires_openssl
+def test_has_pending_secret_deletions_sees_a_deleted_file_with_no_plaintext_left(tmp_root, korean_secret_file):
+    assert secret_crypt.has_pending_secret_deletions(tmp_root) is False
+    secret_crypt.encrypt_all(tmp_root, KEY)
+    assert secret_crypt.has_pending_secret_deletions(tmp_root) is False
+
+    korean_secret_file.unlink()
+
+    assert secret_crypt.has_pending_secret_deletions(tmp_root) is True
+
+
+@requires_openssl
+def test_cli_encrypt_reports_the_deleted_copy(tmp_root, korean_secret_file, capsys, monkeypatch):
+    monkeypatch.setenv("SPARRING_ENCRYPTION_KEY", KEY)
+    assert secret_crypt.main(["encrypt"]) == 0
+    korean_secret_file.unlink()
+    capsys.readouterr()
+
+    assert secret_crypt.main(["encrypt"]) == 0
+
+    assert "deleted: prep/profile/secret-encrypted/비밀 메모.md.enc" in capsys.readouterr().out
+
+
 # ---------- CLI ----------
 
 

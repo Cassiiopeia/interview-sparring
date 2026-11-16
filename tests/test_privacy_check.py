@@ -587,6 +587,83 @@ def test_hook_file_end_to_end_through_git_commit(git_repo):
     assert git(git_repo, "rev-list", "--count", "HEAD").stdout.strip() == "1"
 
 
+DELETABLE_SECRET_RELATIVE = "prep/profile/secret/doc.md"
+DELETABLE_ENCRYPTED_RELATIVE = "prep/profile/secret-encrypted/doc.md.enc"
+
+
+@requires_openssl
+def test_hook_stages_the_removal_when_the_last_secret_file_is_deleted(git_repo):
+    # the only secret file is deleted: no plaintext is left, yet the hook must still drop its encrypted copy
+    write_key_file(git_repo)
+    write(git_repo, DELETABLE_SECRET_RELATIVE, "private note\n")
+    assert privacy_check.run_hook(git_repo) == 0
+    git(git_repo, "commit", "-q", "-m", "first")
+    (git_repo / DELETABLE_SECRET_RELATIVE).unlink()
+
+    assert privacy_check.run_hook(git_repo) == 0
+
+    assert not (git_repo / DELETABLE_ENCRYPTED_RELATIVE).exists()
+    assert f"D\t{DELETABLE_ENCRYPTED_RELATIVE}" in git(git_repo, "diff", "--cached", "--name-status").stdout.splitlines()
+
+
+@requires_openssl
+def test_hook_blocks_a_pending_secret_deletion_when_the_key_is_missing(git_repo, capsys):
+    write_key_file(git_repo)
+    write(git_repo, DELETABLE_SECRET_RELATIVE, "private note\n")
+    assert privacy_check.run_hook(git_repo) == 0
+    (git_repo / ".env").unlink()
+    (git_repo / DELETABLE_SECRET_RELATIVE).unlink()
+
+    assert privacy_check.run_hook(git_repo) == 1
+
+    assert "no encryption key" in capsys.readouterr().err
+    assert (git_repo / DELETABLE_ENCRYPTED_RELATIVE).is_file()
+
+
+def commit_with_one_synced_secret_file(root):
+    """Real hook through `git commit`: README + engine + one secret file committed, its encrypted copy tracked"""
+    install_engine_into(root)
+    write_key_file(root)
+    write(root, "README.md", "clean\n")
+    write(root, DELETABLE_SECRET_RELATIVE, "private note\n")
+    stage(root, "README.md", "tutor", ".githooks")
+    first_commit = git(root, "commit", "-q", "-m", "first", check=False)
+    assert first_commit.returncode == 0, first_commit.stderr
+    assert DELETABLE_ENCRYPTED_RELATIVE in git(root, "ls-files").stdout.splitlines()
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
+@requires_openssl
+def test_deleting_a_secret_file_then_committing_removes_its_encrypted_copy_from_the_commit(git_repo):
+    commit_with_one_synced_secret_file(git_repo)
+
+    # deleting the plaintext is all the user does; the session's own file (like a practice log) is the staged change
+    (git_repo / DELETABLE_SECRET_RELATIVE).unlink()
+    write(git_repo, "README.md", "clean, session 2\n")
+    stage(git_repo, "README.md")
+    second_commit = git(git_repo, "commit", "-q", "-m", "second", check=False)
+
+    assert second_commit.returncode == 0, second_commit.stderr
+    changes = git(git_repo, "show", "--name-status", "--format=", "HEAD").stdout.splitlines()
+    assert sorted(changes) == sorted([f"D\t{DELETABLE_ENCRYPTED_RELATIVE}", "M\tREADME.md"])
+    assert DELETABLE_ENCRYPTED_RELATIVE not in git(git_repo, "ls-files").stdout.splitlines()
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
+@requires_openssl
+def test_a_lone_secret_deletion_is_staged_by_the_hook_and_committed_on_the_second_try(git_repo):
+    commit_with_one_synced_secret_file(git_repo)
+
+    (git_repo / DELETABLE_SECRET_RELATIVE).unlink()
+    # nothing else staged: git decides "nothing to commit" before the hook stages the removal
+    lone_attempt = git(git_repo, "commit", "-q", "-m", "second", check=False)
+    assert lone_attempt.returncode != 0
+    assert f"D  {DELETABLE_ENCRYPTED_RELATIVE}" in git(git_repo, "status", "--short").stdout.splitlines()
+
+    assert git(git_repo, "commit", "-q", "-m", "second", check=False).returncode == 0
+    assert DELETABLE_ENCRYPTED_RELATIVE not in git(git_repo, "ls-files").stdout.splitlines()
+
+
 def install_fake_command(bin_directory, name, script_body):
     bin_directory.mkdir(exist_ok=True)
     fake_command = bin_directory / name

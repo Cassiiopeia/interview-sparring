@@ -2,7 +2,8 @@
 
 `/spar writing`. Cover letters, statements of purpose, research plans, answers to application-form questions.
 Drafts live in `interviews/<x>/writing/`; finals move to `submitted/` (§6). Limits and deadlines come from
-`checklist.md`.
+`checklist.md`. In `public-encrypted` storage drafts live in `writing/secret/` instead (§6, privacy.md §2): a plain
+`writing/` file would be published.
 
 ## 1. Who writes what
 
@@ -39,8 +40,8 @@ paragraph by paragraph is a failure.
 
 - An application is not a paper. Write **"what I want to do"** in plain words. Reviewers do not expect a finished,
   fully feasible plan from an applicant.
-- ✗ every regulation or reference number in the body > ○ say what it means in plain words.
-- ✗ academic phrasing ("this study examines...", "the regulatory gap in...") > ○ "X is missing", "I want to see Y".
+- ✗ a product name or model number in every sentence > ○ say what it does in plain words.
+- ✗ academic phrasing ("this study examines...", "a gap in the onboarding process...") > ○ "X is missing", "I want to see Y".
 - One piece of evidence per paragraph, short. Do not define concepts before starting: **start from what you saw.**
 - Depth belongs in the interview. Research the tutor did is follow-up preparation, not document content.
 
@@ -54,7 +55,10 @@ If the user, reading a draft, raises an objection ("isn't that obvious?"), a rev
 
 When the user says they submitted:
 1. Copy the final files: `python3 tutor/scripts/interview_folder.py submit <folder> <file>...` (writing/ > submitted/,
-   never overwrites). In `public-encrypted` mode the full text goes to `secret/` instead (privacy.md §2).
+   never overwrites). In `public-encrypted` mode the full text must exist only inside a `secret/` folder (privacy.md §2):
+   `submit` keeps the relative path, so `writing/secret/x.md` lands in `submitted/secret/x.md` (encrypted on commit).
+   A final that sits in plain `writing/` is first copied into `writing/secret/` and submitted from there; never submit
+   from the plain folder, because a plain copy in `submitted/` would be published.
 2. Derive `questions.md` from the submitted sentences, each row with its source sentence (grading.md §4).
 3. Close the writing task in `tasks.md` with the date; open the practice tasks (must-prepare three).
 4. `submitted/` is never edited afterwards. Corrections the user wishes they had made go into `directions.md` as

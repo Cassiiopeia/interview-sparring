@@ -4,6 +4,7 @@
     python3 tutor/scripts/init.py setup --storage private|local|public-encrypted [--language en] [--input typing|voice]
                                         [--remote URL] [--encrypt-secrets] [--untrack-prep]
     python3 tutor/scripts/init.py status          JSON: settings, key, openssl, hook, origin, what is ready, what is still missing
+    python3 tutor/scripts/init.py hooks           only switch the privacy and push hooks on (git config core.hooksPath .githooks)
     python3 tutor/scripts/init.py confirm-remote  record the current origin as private (only after the user said so)
 
 setup can be re-run: settings are updated, files already in prep/ are never overwritten.
@@ -18,6 +19,7 @@ Leaving local storage deletes prep/.gitignore when it is exactly the generated r
 Every remote that points at the template gets the push URL `no_push`, so a push there fails.
 confirm-remote stores the origin URL (credentials removed) in settings.json; remote_guard accepts it for private storage
 only for a non-GitHub host (GitHub is always checked by the API, so a GitHub origin is refused here). Setup never confirms anything by itself.
+hooks is for a fresh clone (git config is local, so the hooks start off); it changes nothing else and is safe to repeat.
 Exit codes: 0 ok, 1 invalid input or unsafe request, 2 prerequisite missing (openssl).
 """
 
@@ -253,6 +255,14 @@ def configure_hooks(root):
         say(f"privacy and push hooks enabled (core.hooksPath = {GIT_HOOKS_PATH})")
 
 
+def command_hooks(root):
+    """Only core.hooksPath = .githooks (a fresh clone has the hooks off); safe to repeat"""
+    if not is_git_repository(root):
+        raise SetupError("not a git repository: run `git init` (or clone the template) first")
+    configure_hooks(root)
+    return EXIT_OK
+
+
 def print_storage_warnings(storage):
     if storage == STORAGE_LOCAL:
         say("warning: storage local keeps no backup; losing this computer loses prep/")
@@ -337,6 +347,7 @@ def build_parser():
         "--untrack-prep", action="store_true", help="local storage: run `git rm -r --cached prep` (files stay on disk)"
     )
     commands.add_parser("status", help="print the state as JSON")
+    commands.add_parser("hooks", help="switch the privacy and push hooks on (a fresh clone has them off)")
     commands.add_parser("confirm-remote", help="record the current origin as private (after the user confirmed it)")
     return parser
 
@@ -350,6 +361,8 @@ def main(argv=None):
             return command_setup(root, arguments)
         if arguments.command == "confirm-remote":
             return command_confirm_remote(root)
+        if arguments.command == "hooks":
+            return command_hooks(root)
         return command_status(root)
     except SetupError as error:
         print(f"[init] {error}", file=sys.stderr)

@@ -14,7 +14,14 @@ import init
 import prep_settings
 import remote_guard
 import review
-from repo_helpers import TEMPLATE_HTTPS_URL, USER_REMOTE_URL, commit_all_staged, run_git, url_with_credentials
+from repo_helpers import (
+    TEMPLATE_HTTPS_URL,
+    USER_REMOTE_URL,
+    commit_all_staged,
+    run_git,
+    url_with_credentials,
+    write_storage,
+)
 
 KEY_LINE_PATTERN = re.compile(r"^SPARRING_ENCRYPTION_KEY=(\S+)$", re.MULTILINE)
 
@@ -334,6 +341,67 @@ def test_setup_does_not_touch_the_hooks_of_an_enclosing_repo(tmp_root, monkeypat
     assert run_git(outer, "config", "--get", "core.hooksPath") == ""
 
 
+# ---------- hooks (fresh clone) ----------
+
+
+def create_hook_files(root):
+    """The copy's own .githooks files (they come with the clone; only the git config is missing)"""
+    (root / ".githooks").mkdir()
+    for hook_name in ("pre-commit", "pre-push"):
+        (root / ".githooks" / hook_name).write_text("#!/bin/sh\n", encoding="utf-8")
+
+
+def test_hooks_command_sets_the_hooks_path_and_prints_the_result(git_root, capsys):
+    create_hook_files(git_root)
+    assert run_git(git_root, "config", "--get", "core.hooksPath") == ""
+
+    assert init.main(["hooks"]) == 0
+
+    assert run_git(git_root, "config", "--get", "core.hooksPath") == ".githooks"
+    assert "core.hooksPath = .githooks" in capsys.readouterr().out
+
+
+def test_hooks_command_warns_when_the_hook_files_are_missing(git_root, capsys):
+    assert init.main(["hooks"]) == 0
+
+    assert run_git(git_root, "config", "--get", "core.hooksPath") == ".githooks"
+    assert "pre-commit, pre-push missing" in capsys.readouterr().out
+
+
+def test_hooks_command_changes_nothing_but_the_hooks_path(git_root):
+    create_hook_files(git_root)
+    init.main(["hooks"])
+
+    assert not (git_root / "prep").exists()
+    assert not (git_root / ".env").exists()
+    assert run_git(git_root, "remote") == ""
+
+
+def test_hooks_command_is_safe_to_repeat(git_root):
+    assert init.main(["hooks"]) == 0
+    assert init.main(["hooks"]) == 0
+
+    assert run_git(git_root, "config", "--get-all", "core.hooksPath") == ".githooks"
+
+
+def test_hooks_command_outside_a_git_repo_is_an_error(tmp_root, capsys):
+    assert init.main(["hooks"]) == init.EXIT_INVALID_INPUT
+
+    assert "not a git repository" in capsys.readouterr().err
+
+
+def test_hooks_command_does_not_touch_the_hooks_of_an_enclosing_repo(tmp_root, monkeypatch):
+    outer = tmp_root / "outer"
+    inner = outer / "inner"
+    inner.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+    monkeypatch.setenv("SPARRING_ROOT", str(inner))
+
+    assert init.main(["hooks"]) == init.EXIT_INVALID_INPUT
+
+    assert run_git(outer, "config", "--get", "core.hooksPath") == ""
+
+
 # ---------- setup: remotes ----------
 
 
@@ -576,6 +644,30 @@ def test_status_after_setup_lists_what_the_conversation_must_fill(git_root, caps
         "no experience card yet",
         "no interview folder yet",
     ]
+    assert "privacy hook is active" in report["ready"]
+
+
+def test_status_of_a_fresh_clone_with_settings_says_the_hooks_are_inactive(git_root, capsys):
+    # settings.json comes with the copy of an existing setup; core.hooksPath is local git config and starts unset
+    write_storage(git_root, "private")
+    capsys.readouterr()
+
+    report = read_status(capsys)
+
+    assert report["hooks"] is False
+    assert report["missing"][0] == "privacy hooks inactive (run: init.py hooks)"
+    assert "privacy hook is active" not in report["ready"]
+
+
+def test_status_drops_the_inactive_hooks_line_once_the_hooks_command_ran(git_root, capsys):
+    write_storage(git_root, "private")
+    assert init.main(["hooks"]) == 0
+    capsys.readouterr()
+
+    report = read_status(capsys)
+
+    assert report["hooks"] is True
+    assert "privacy hooks inactive (run: init.py hooks)" not in report["missing"]
     assert "privacy hook is active" in report["ready"]
 
 

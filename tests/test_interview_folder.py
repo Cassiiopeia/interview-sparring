@@ -165,6 +165,18 @@ def test_submit_copies_from_writing_to_submitted_keeping_the_relative_path(tmp_r
     assert plan.read_text(encoding="utf-8") == "research plan"
 
 
+def test_submit_keeps_a_secret_subfolder_so_a_public_encrypted_final_stays_in_secret(tmp_root):
+    # writing.md (public-encrypted storage): drafts live in writing/secret/, the final must land in submitted/secret/
+    interview = create_interview(tmp_root)
+    final = write_writing_file(interview, "secret/statement.md", "full text")
+
+    copied = interview_folder.submit(tmp_root, interview, [final])
+
+    assert copied == [interview / "submitted" / "secret" / "statement.md"]
+    assert (interview / "submitted" / "secret" / "statement.md").read_text(encoding="utf-8") == "full text"
+    assert not (interview / "submitted" / "statement.md").exists()
+
+
 def test_submit_refuses_overwrite(tmp_root):
     interview = create_interview(tmp_root)
     plan = write_writing_file(interview, "plan.md", "v2 draft")

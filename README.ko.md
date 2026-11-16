@@ -1,7 +1,8 @@
 # interview-sparring
 
 **이 레포를 fork 하지 마세요 — 공개 레포의 fork 는 공개이고, 면접 기록도 함께 공개됩니다.**
-**「Use this template」** 으로 자기 **비공개** 레포를 만들거나, clone 한 뒤 자기 비공개 레포로 push 하세요.
+자기 **비공개** 레포를 만드세요. 호스트에 **「Use this template」** 버튼이 있으면 그것으로, 없으면 이 레포를 clone 한 뒤
+`/spar init` 에 자기 빈 비공개 레포 주소를 알려 주면 됩니다.
 
 Claude Code(그리고 `AGENTS.md` 를 읽는 에이전트)에서 도는 면접 준비 스파링 상대입니다.
 사용자는 말만 합니다. 조수가 면접관이 실제로 물을 질문을 던지고, 가장 큰 문제를 짚고, **사용자가 한 말로** 다듬은 답을
@@ -11,7 +12,10 @@ Claude Code(그리고 `AGENTS.md` 를 읽는 에이전트)에서 도는 면접 �
 
 ## 시작
 
-1. **Use this template** > **비공개** 레포 생성 > clone
+1. 자기 사본을 만든다. 둘 중 하나:
+   - **Use this template** > **비공개** 레포 생성 > clone, 또는
+   - 그 버튼이 없으면: 이 레포를 clone > 호스트에서 **빈 비공개** 레포 생성 > 그 주소를 `/spar init` 에 알려 준다
+     (자기 레포가 `origin` 이 되고, 이 레포는 `upstream` 으로 남습니다)
 2. 폴더를 Claude Code 로 연다
 3. `/spar init` 을 입력하고 질문에 답한다
 
@@ -98,6 +102,8 @@ Claude Code(그리고 `AGENTS.md` 를 읽는 에이전트)에서 도는 면접 �
 - 규칙은 `tutor/rules/`(영어)에 있습니다. 원본은 `CLAUDE.md` 와 `.claude/commands/spar.md` 이고, 고친 뒤에는
   `python3 tutor/scripts/sync_agents.py write` 를 실행합니다 (AGENTS.md · `.agents/skills/` 는 생성본).
 - PR 전에: `python3 -m pytest`, `python3 tutor/scripts/privacy_check.py scan-all`.
+- CI(`.github/workflows/test.yml`)는 upstream 레포에서만 돕니다. 템플릿으로 만든 사본에서는 건너뛰므로 테스트는 로컬에서
+  돌리세요.
 - 새 언어: `tutor/rules/language/<code>.md` 와 `<code>.patterns.txt`. 새 면접 종류: `tutor/rules/interview-types/<kind>.md`.
 
 ## 라이선스

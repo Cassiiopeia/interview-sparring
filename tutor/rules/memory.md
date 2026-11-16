@@ -76,6 +76,7 @@ memorised word for word.
 | `practice/` | one log per session (core.md §5), optional `deck/` |
 | `asked.md` | questions really asked (modes/debrief.md) |
 
+- Secret files: to delete one, delete the plaintext in `secret/`; the commit hook removes its encrypted copy (privacy.md §4).
 - Create with `interview_folder.py new`; copy finals with `interview_folder.py submit` (refuses anything outside
   `writing/` and never overwrites a submitted file).
 - **Tasks**: the tutor creates and closes them — from notices, from "unconfirmed" items in practice, from the

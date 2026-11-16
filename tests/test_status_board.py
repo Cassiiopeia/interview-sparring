@@ -254,12 +254,34 @@ def test_rebuild_status_names_a_status_file_that_is_not_utf8_and_leaves_it(tmp_r
     assert status_file.read_bytes() == original_bytes
 
 
-def test_rebuild_status_names_a_tasks_file_that_is_not_utf8(tmp_root):
-    interview = create_interview(tmp_root)
-    (interview / "tasks.md").write_bytes(b"## Open\n- [ ] caf\xe9 \xff\n")
+def test_rebuild_status_reads_a_tasks_file_that_is_not_utf8_and_flags_that_interview(tmp_root):
+    broken = create_interview(tmp_root, org="Broken", kind="exam", interview_date="2026-11-28")
+    (broken / "tasks.md").write_bytes(b"## Open\n- [ ] caf\xe9 menu\n- [ ] second task\n")
+    fine = create_interview(tmp_root, org="Fine", kind="exam", interview_date="2026-12-01")
+    write_tasks(fine, ["fine task"])
 
-    with pytest.raises(interview_folder.InterviewFolderError, match=rf"{interview.name}/tasks\.md is not valid UTF-8"):
-        status_board.rebuild_status(tmp_root, TODAY)
+    status = status_board.rebuild_status(tmp_root, TODAY)
+
+    assert "- 2026-11-broken-exam: D-12 (2026-11-28) (tasks.md has invalid characters)" in status
+    assert "- 2026-11-fine-exam: D-15 (2026-12-01)\n" in status
+    # the readable lines still count as tasks; the bad byte is replaced
+    assert "1. [2026-11-broken-exam] caf\ufffd menu" in status
+    assert "2. [2026-11-broken-exam] second task" in status
+
+
+def test_read_open_tasks_replaces_bytes_that_are_not_utf8(tmp_root):
+    tasks_file = tmp_root / "tasks.md"
+    tasks_file.write_bytes(b"## Open\n- [ ] ok \xff\n")
+
+    assert status_board.read_open_tasks(tasks_file) == ["ok \ufffd"]
+
+
+def test_describe_interview_shows_both_notes_when_meta_and_tasks_are_damaged():
+    summary = status_board.InterviewSummary("x", None, False, [], False)
+
+    assert status_board.describe_interview(summary, TODAY) == (
+        "- x: no date (meta.json unreadable) (tasks.md has invalid characters)"
+    )
 
 
 def test_rebuild_status_treats_a_meta_file_that_is_not_utf8_as_unreadable(tmp_root):

@@ -65,7 +65,7 @@ From what they pasted and said, propose ledger rows **one at a time**: "Your cur
 
 ## 5. Practice style
 
-- Typing or voice? Voice > tell them about dictation tools (voice.md §4) and set `--input voice` (re-run setup).
+- Typing or voice? Voice > tell them about dictation tools (voice.md §4), then re-run setup with the current status values plus `--input voice`.
 - Example answers first (default), or "let me try first"? Record the choice in `coaching.md` > Rules from you.
 
 ## 6. Finish

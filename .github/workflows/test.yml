@@ -7,6 +7,8 @@ on:
 
 jobs:
   test:
+    # only the upstream repository: copies made from the template would burn CI minutes on engine tests
+    if: github.repository == 'Cassiiopeia/interview-sparring'
     strategy:
       fail-fast: false
       matrix:

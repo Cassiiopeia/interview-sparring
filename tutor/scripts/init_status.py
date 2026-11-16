@@ -11,6 +11,8 @@ from secret_crypt import load_key
 # a markdown table has a header row and a separator row before the data rows
 TABLE_HEADER_ROW_COUNT = 2
 PLACEHOLDER_FILE_NAME = ".gitkeep"
+# listed first in `missing` once setup has run: a fresh clone has core.hooksPath unset
+HOOKS_INACTIVE_MESSAGE = "privacy hooks inactive (run: init.py hooks)"
 
 
 def is_hooks_configured(root):
@@ -78,6 +80,8 @@ def build_status_report(root, openssl_path):
     else:
         content_ready, missing = list_content_progress(Path(root) / "prep")
         ready.extend(content_ready)
+        if not hooks:
+            missing.insert(0, HOOKS_INACTIVE_MESSAGE)
     settings = settings or {}
     return {
         "storage": settings.get("storage"),

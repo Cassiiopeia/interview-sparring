@@ -41,6 +41,7 @@ SECTION_HEADING_PATTERN = re.compile(r"^#{1,2}\s+(?P<title>.+?)\s*#*\s*$")
 
 NO_DATE_LABEL = "no date"
 UNREADABLE_META_NOTE = "meta.json unreadable"
+INVALID_TASKS_TEXT_NOTE = "tasks.md has invalid characters"
 
 
 @dataclass(frozen=True)
@@ -50,16 +51,27 @@ class InterviewSummary:
     # False when meta.json is missing, damaged, or holds an interview_date that is not YYYY-MM-DD
     is_meta_readable: bool
     open_tasks: list
+    # False when tasks.md is not valid UTF-8 (read with replacement characters, the board says so)
+    is_tasks_text_valid: bool = True
 
 
-def read_open_tasks(tasks_file):
-    """Texts of the `- [ ]` lines under `## Open`, in file order; [] when the file is missing"""
+def read_tasks_text(tasks_file):
+    """(text, is_valid): a tasks.md that is not UTF-8 is read with replacement characters instead of failing; missing > ("", True)"""
     tasks_path = Path(tasks_file)
     if not tasks_path.is_file():
-        return []
+        return "", True
+    raw_bytes = tasks_path.read_bytes()
+    try:
+        return raw_bytes.decode("utf-8-sig"), True
+    except UnicodeDecodeError:
+        return raw_bytes.decode("utf-8-sig", errors="replace"), False
+
+
+def parse_open_tasks(tasks_text):
+    """Texts of the `- [ ]` lines under `## Open`, in file order"""
     open_tasks = []
     is_in_open_section = False
-    for line in read_utf8_text(tasks_path).splitlines():
+    for line in tasks_text.splitlines():
         heading = SECTION_HEADING_PATTERN.match(line)
         if heading:
             is_in_open_section = heading.group("title") == OPEN_SECTION_TITLE
@@ -68,6 +80,12 @@ def read_open_tasks(tasks_file):
         if is_in_open_section and task:
             open_tasks.append(task.group("text"))
     return open_tasks
+
+
+def read_open_tasks(tasks_file):
+    """Open task texts of a tasks.md; [] when the file is missing (invalid characters are replaced, not fatal)"""
+    tasks_text, _ = read_tasks_text(tasks_file)
+    return parse_open_tasks(tasks_text)
 
 
 def read_interview_date(folder):
@@ -98,8 +116,11 @@ def list_interviews(root):
         if not folder.is_dir() or folder.name.startswith("."):
             continue
         interview_date, is_meta_readable = read_interview_date(folder)
+        tasks_text, is_tasks_text_valid = read_tasks_text(folder / TASKS_FILE_NAME)
         summaries.append(
-            InterviewSummary(folder.name, interview_date, is_meta_readable, read_open_tasks(folder / TASKS_FILE_NAME))
+            InterviewSummary(
+                folder.name, interview_date, is_meta_readable, parse_open_tasks(tasks_text), is_tasks_text_valid
+            )
         )
     return summaries
 
@@ -129,12 +150,15 @@ def format_d_day(interview_date, today):
 
 
 def describe_interview(summary, today):
-    """'- 2026-11-acme-mock: D-12 (2026-11-28)', '- name: no date', '- name: no date (meta.json unreadable)'"""
+    """'- 2026-11-acme-mock: D-12 (2026-11-28)', '- name: no date', '- name: no date (meta.json unreadable)', '... (tasks.md has invalid characters)'"""
     label = format_d_day(summary.interview_date, today)
     if summary.interview_date is not None:
-        return f"- {summary.name}: {label} ({summary.interview_date.isoformat()})"
-    note = "" if summary.is_meta_readable else f" ({UNREADABLE_META_NOTE})"
-    return f"- {summary.name}: {label}{note}"
+        line = f"- {summary.name}: {label} ({summary.interview_date.isoformat()})"
+    else:
+        meta_note = "" if summary.is_meta_readable else f" ({UNREADABLE_META_NOTE})"
+        line = f"- {summary.name}: {label}{meta_note}"
+    # (tasks shown on the board may be garbled: say so instead of failing the whole rebuild)
+    return line if summary.is_tasks_text_valid else f"{line} ({INVALID_TASKS_TEXT_NOTE})"
 
 
 def build_board_block(summaries, today):

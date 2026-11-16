@@ -28,6 +28,7 @@ from secret_crypt import (
     WrongKeyError,
     encrypt_all,
     find_openssl,
+    has_pending_secret_deletions,
     keycheck_path,
     load_key,
 )
@@ -247,6 +248,8 @@ def encrypt_secret_files(root):
         return conflict_lines + [f"run `{DECRYPT_COMMAND}` first, resolve the conflicts, then commit again"]
     if result.changed:
         print(f"[privacy_check] encrypted {len(result.changed)} secret file(s)")
+    if result.deleted:
+        print(f"[privacy_check] removed {len(result.deleted)} encrypted copy(ies) of deleted secret file(s)")
     return []
 
 
@@ -254,8 +257,9 @@ def run_hook(root: Path) -> int:
     """Pre-commit: encrypt secret/ > stage .enc copies > scan staged files; 0 pass, 1 block"""
     root = Path(root)
     try:
-        # secret/ plaintext check (no files = no key needed)
-        reasons = encrypt_secret_files(root) if list_plaintext_secret_files(root) else []
+        # secret/ work: plaintext to encrypt, or a deleted file whose .enc must go (neither = no key needed)
+        has_secret_work = bool(list_plaintext_secret_files(root)) or has_pending_secret_deletions(root)
+        reasons = encrypt_secret_files(root) if has_secret_work else []
         if not reasons:
             # (staged whether or not plaintext exists: a pulled or hand-fixed .enc must not be left out)
             stage_encrypted_files(root)

@@ -1,8 +1,8 @@
 # interview-sparring
 
 **Don't fork this repository — a fork of a public repository is public, and your interview notes would be too.**
-Use **"Use this template"** to create your own **private** repository, or clone it and push to a private repository
-of your own.
+Make your own **private** repository: with **"Use this template"** when your host offers it, or by cloning this
+repository and giving `/spar init` an empty private repository of your own.
 
 An AI sparring partner for interview prep that runs in Claude Code (and other agents that read `AGENTS.md`).
 You talk; it asks the questions an interviewer would really ask, cuts in on the biggest problem, shows you a polished
@@ -12,7 +12,10 @@ answer built from your own words, and makes you answer again. You never edit a f
 
 ## Quick start
 
-1. **Use this template** > create a **private** repository > clone it.
+1. Get your own copy, either way:
+   - **Use this template** > create a **private** repository > clone it; or
+   - if there is no such button: clone this repository > create an **empty private** repository on your host >
+     give that URL to `/spar init` (it becomes your `origin`; this repository is kept as `upstream`).
 2. Open the folder in Claude Code.
 3. Type `/spar init` and answer the questions.
 
@@ -102,6 +105,8 @@ Limits:
 - Rules live in `tutor/rules/` (English). `CLAUDE.md` and `.claude/commands/spar.md` are the sources; after editing
   them run `python3 tutor/scripts/sync_agents.py write` (AGENTS.md and `.agents/skills/` are generated).
 - Before a pull request: `python3 -m pytest` and `python3 tutor/scripts/privacy_check.py scan-all`.
+- CI (`.github/workflows/test.yml`) runs only in the upstream repository; copies made from the template skip it, so
+  run the tests locally there.
 - New language: add `tutor/rules/language/<code>.md` and `<code>.patterns.txt`. New interview type: add
   `tutor/rules/interview-types/<kind>.md`.
 
